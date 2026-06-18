@@ -1,2 +1,5 @@
 /target
 **/*.rs.bk
+
+# test/output archives
+backup.zip

@@ -1,10 +1,8 @@
-mod archive;
-mod cli;
-
 use anyhow::Result;
 use clap::Parser;
 
-use cli::{Cli, Command};
+use rust_zip_archive::archive;
+use rust_zip_archive::cli::{Cli, Command};
 
 fn main() -> Result<()> {
     let cli = Cli::parse();

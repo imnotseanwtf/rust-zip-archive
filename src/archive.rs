@@ -31,8 +31,8 @@ pub fn create(
         }
     }
 
-    let file = File::create(output)
-        .with_context(|| format!("creating archive {}", output.display()))?;
+    let file =
+        File::create(output).with_context(|| format!("creating archive {}", output.display()))?;
     let mut zip = ZipWriter::new(BufWriter::new(file));
 
     let method = compression.to_zip_method();
@@ -68,8 +68,7 @@ pub fn create(
                 File::open(&entry.path)
                     .with_context(|| format!("reading {}", entry.path.display()))?,
             );
-            io::copy(&mut f, &mut zip)
-                .with_context(|| format!("compressing {}", entry.name))?;
+            io::copy(&mut f, &mut zip).with_context(|| format!("compressing {}", entry.name))?;
         }
         bar.inc(1);
     }
@@ -81,13 +80,12 @@ pub fn create(
 
 /// Extract every entry of `archive` into `dest`.
 pub fn extract(archive: &Path, dest: &Path, force: bool) -> Result<()> {
-    let file = File::open(archive)
-        .with_context(|| format!("opening archive {}", archive.display()))?;
+    let file =
+        File::open(archive).with_context(|| format!("opening archive {}", archive.display()))?;
     let mut zip = ZipArchive::new(BufReader::new(file))
         .with_context(|| format!("reading archive {}", archive.display()))?;
 
-    fs::create_dir_all(dest)
-        .with_context(|| format!("creating destination {}", dest.display()))?;
+    fs::create_dir_all(dest).with_context(|| format!("creating destination {}", dest.display()))?;
 
     let bar = progress_bar(zip.len() as u64, "Extracting");
 
@@ -96,8 +94,11 @@ pub fn extract(archive: &Path, dest: &Path, force: bool) -> Result<()> {
         let raw_name = entry
             .enclosed_name()
             .with_context(|| format!("unsafe path in archive: {}", entry.name()))?;
-        let outpath = dest.join(&raw_name);
-        bar.set_message(raw_name.display().to_string());
+        // On Windows, rewrite reserved device names and illegal characters so
+        // extraction doesn't fail on otherwise-valid archives. No-op elsewhere.
+        let safe_name = sanitize_path(&raw_name);
+        let outpath = dest.join(&safe_name);
+        bar.set_message(safe_name.display().to_string());
 
         if entry.is_dir() {
             fs::create_dir_all(&outpath)?;
@@ -120,9 +121,7 @@ pub fn extract(archive: &Path, dest: &Path, force: bool) -> Result<()> {
                 use std::os::unix::fs::PermissionsExt;
                 if let Some(mode) = entry.unix_mode() {
                     fs::set_permissions(&outpath, fs::Permissions::from_mode(mode))
-                        .with_context(|| {
-                            format!("setting permissions on {}", outpath.display())
-                        })?;
+                        .with_context(|| format!("setting permissions on {}", outpath.display()))?;
                 }
             }
         }
@@ -135,8 +134,8 @@ pub fn extract(archive: &Path, dest: &Path, force: bool) -> Result<()> {
 
 /// Print a human-readable table of the archive's contents.
 pub fn list(archive: &Path) -> Result<()> {
-    let file = File::open(archive)
-        .with_context(|| format!("opening archive {}", archive.display()))?;
+    let file =
+        File::open(archive).with_context(|| format!("opening archive {}", archive.display()))?;
     let mut zip = ZipArchive::new(BufReader::new(file))
         .with_context(|| format!("reading archive {}", archive.display()))?;
 
@@ -151,7 +150,11 @@ pub fn list(archive: &Path) -> Result<()> {
         let comp = entry.compressed_size();
         total_size += size;
         total_comp += comp;
-        let ratio = if size == 0 { 0.0 } else { 100.0 * (1.0 - comp as f64 / size as f64) };
+        let ratio = if size == 0 {
+            0.0
+        } else {
+            100.0 * (1.0 - comp as f64 / size as f64)
+        };
         println!(
             "{:>12}  {:>12}  {:>5.0}%  {}",
             size,
@@ -233,6 +236,63 @@ fn to_archive_name(path: &Path) -> String {
         }
     }
     parts.join("/")
+}
+
+/// On non-Windows platforms the archive path is already a valid relative path.
+#[cfg(not(windows))]
+fn sanitize_path(path: &Path) -> PathBuf {
+    path.to_path_buf()
+}
+
+/// On Windows, rewrite each path component so it is a legal filename:
+/// reserved device names (CON, NUL, COM1…), illegal characters (`<>:"|?*`),
+/// and trailing dots/spaces are all made safe by inserting an underscore.
+#[cfg(windows)]
+fn sanitize_path(path: &Path) -> PathBuf {
+    let mut out = PathBuf::new();
+    for comp in path.components() {
+        match comp {
+            Component::Normal(part) => out.push(sanitize_windows_name(&part.to_string_lossy())),
+            other => out.push(other.as_os_str()),
+        }
+    }
+    out
+}
+
+/// Make a single path component safe to create on Windows.
+#[cfg(windows)]
+fn sanitize_windows_name(name: &str) -> String {
+    const RESERVED: &[&str] = &[
+        "CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8",
+        "COM9", "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
+    ];
+
+    // Replace characters Windows forbids in filenames.
+    let mut cleaned: String = name
+        .chars()
+        .map(|c| match c {
+            '<' | '>' | ':' | '"' | '|' | '?' | '*' => '_',
+            c if (c as u32) < 0x20 => '_',
+            c => c,
+        })
+        .collect();
+
+    // The stem (text before the first dot) determines a reserved name clash.
+    let stem = cleaned.split('.').next().unwrap_or("");
+    if RESERVED.iter().any(|r| r.eq_ignore_ascii_case(stem)) {
+        cleaned.insert(0, '_');
+    }
+
+    // Windows silently strips trailing dots and spaces; keep the name intact
+    // by appending an underscore instead.
+    if cleaned.ends_with('.') || cleaned.ends_with(' ') {
+        cleaned.push('_');
+    }
+
+    if cleaned.is_empty() {
+        cleaned.push('_');
+    }
+    cleaned
 }
 
 fn progress_bar(len: u64, verb: &str) -> ProgressBar {

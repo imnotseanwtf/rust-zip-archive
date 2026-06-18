@@ -5,9 +5,13 @@ edition = "2021"
 description = "A simple 7-Zip/WinRAR-style CLI archive utility"
 license = "MIT"
 
+[lib]
+name = "rust_zip_archive"
+path = "src/lib.rs"
+
 [[bin]]
 name = "rza"
-path = "src/main.rs"
+path = "src/bin/rza.rs"
 
 [dependencies]
 clap = { version = "4.5", features = ["derive"] }
@@ -15,6 +19,9 @@ zip = { version = "2.2", features = ["deflate", "bzip2", "zstd", "time"] }
 walkdir = "2.5"
 anyhow = "1.0"
 indicatif = "0.17"
+
+[dev-dependencies]
+tempfile = "3"
 
 [profile.release]
 opt-level = 3
