@@ -126,3 +126,31 @@ fn preserves_executable_bit() {
         .mode();
     assert!(mode & 0o111 != 0, "executable bit was not preserved");
 }
+
+#[test]
+fn list_returns_entry_metadata() {
+    use rust_zip_archive::archive::{self, EntryInfo};
+    use rust_zip_archive::cli::Compression;
+
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+    let src = root.join("data.txt");
+    write(&src, &"x".repeat(500));
+
+    let archive = root.join("a.zip");
+    archive::create(
+        &archive,
+        std::slice::from_ref(&src),
+        Compression::Deflate,
+        false,
+        |_p| {},
+    )
+    .unwrap();
+
+    let entries: Vec<EntryInfo> = archive::list(&archive).unwrap();
+    assert_eq!(entries.len(), 1);
+    assert_eq!(entries[0].name, "data.txt");
+    assert_eq!(entries[0].size, 500);
+    assert!(entries[0].compressed > 0);
+    assert!(!entries[0].is_dir);
+}

@@ -1,5 +1,4 @@
 use anyhow::{bail, Context, Result};
-use indicatif::{ProgressBar, ProgressStyle};
 use std::fs::{self, File};
 use std::io::{self, BufReader, BufWriter};
 use std::path::{Component, Path, PathBuf};
@@ -9,12 +8,28 @@ use zip::{ZipArchive, ZipWriter};
 
 use crate::cli::Compression;
 
+/// Progress update emitted by long-running operations.
+pub struct Progress {
+    pub current: u64,
+    pub total: u64,
+    pub message: String,
+}
+
+/// Metadata about one entry in an archive (used by `list`).
+pub struct EntryInfo {
+    pub name: String,
+    pub size: u64,
+    pub compressed: u64,
+    pub is_dir: bool,
+}
+
 /// Create a zip archive at `output` containing every path in `inputs`.
 pub fn create(
     output: &Path,
     inputs: &[PathBuf],
     compression: Compression,
     force: bool,
+    mut progress: impl FnMut(Progress),
 ) -> Result<()> {
     if output.exists() && !force {
         bail!(
@@ -46,10 +61,14 @@ pub fn create(
 
     // Collect the full list of files first so we can show meaningful progress.
     let entries = collect_entries(inputs, self_path.as_deref())?;
-    let bar = progress_bar(entries.len() as u64, "Archiving");
 
-    for entry in &entries {
-        bar.set_message(entry.name.clone());
+    let total = entries.len() as u64;
+    for (i, entry) in entries.iter().enumerate() {
+        progress(Progress {
+            current: i as u64,
+            total,
+            message: entry.name.clone(),
+        });
         if entry.is_dir {
             zip.add_directory(&entry.name, base_options)
                 .with_context(|| format!("adding directory {}", entry.name))?;
@@ -70,16 +89,24 @@ pub fn create(
             );
             io::copy(&mut f, &mut zip).with_context(|| format!("compressing {}", entry.name))?;
         }
-        bar.inc(1);
     }
 
     zip.finish().context("finalizing archive")?;
-    bar.finish_with_message(format!("Created {}", output.display()));
+    progress(Progress {
+        current: total,
+        total,
+        message: "done".into(),
+    });
     Ok(())
 }
 
 /// Extract every entry of `archive` into `dest`.
-pub fn extract(archive: &Path, dest: &Path, force: bool) -> Result<()> {
+pub fn extract(
+    archive: &Path,
+    dest: &Path,
+    force: bool,
+    mut progress: impl FnMut(Progress),
+) -> Result<()> {
     let file =
         File::open(archive).with_context(|| format!("opening archive {}", archive.display()))?;
     let mut zip = ZipArchive::new(BufReader::new(file))
@@ -87,18 +114,19 @@ pub fn extract(archive: &Path, dest: &Path, force: bool) -> Result<()> {
 
     fs::create_dir_all(dest).with_context(|| format!("creating destination {}", dest.display()))?;
 
-    let bar = progress_bar(zip.len() as u64, "Extracting");
-
+    let total = zip.len() as u64;
     for i in 0..zip.len() {
         let mut entry = zip.by_index(i)?;
         let raw_name = entry
             .enclosed_name()
             .with_context(|| format!("unsafe path in archive: {}", entry.name()))?;
-        // On Windows, rewrite reserved device names and illegal characters so
-        // extraction doesn't fail on otherwise-valid archives. No-op elsewhere.
         let safe_name = sanitize_path(&raw_name);
         let outpath = dest.join(&safe_name);
-        bar.set_message(safe_name.display().to_string());
+        progress(Progress {
+            current: i as u64,
+            total,
+            message: safe_name.display().to_string(),
+        });
 
         if entry.is_dir() {
             fs::create_dir_all(&outpath)?;
@@ -125,59 +153,34 @@ pub fn extract(archive: &Path, dest: &Path, force: bool) -> Result<()> {
                 }
             }
         }
-        bar.inc(1);
     }
 
-    bar.finish_with_message(format!("Extracted into {}", dest.display()));
+    progress(Progress {
+        current: total,
+        total,
+        message: "done".into(),
+    });
     Ok(())
 }
 
-/// Print a human-readable table of the archive's contents.
-pub fn list(archive: &Path) -> Result<()> {
+/// Return metadata for every entry in the archive.
+pub fn list(archive: &Path) -> Result<Vec<EntryInfo>> {
     let file =
         File::open(archive).with_context(|| format!("opening archive {}", archive.display()))?;
     let mut zip = ZipArchive::new(BufReader::new(file))
         .with_context(|| format!("reading archive {}", archive.display()))?;
 
-    println!("{:>12}  {:>12}  {:>6}  Name", "Size", "Compressed", "Ratio");
-    println!("{}", "-".repeat(60));
-
-    let mut total_size = 0u64;
-    let mut total_comp = 0u64;
+    let mut entries = Vec::with_capacity(zip.len());
     for i in 0..zip.len() {
         let entry = zip.by_index(i)?;
-        let size = entry.size();
-        let comp = entry.compressed_size();
-        total_size += size;
-        total_comp += comp;
-        let ratio = if size == 0 {
-            0.0
-        } else {
-            100.0 * (1.0 - comp as f64 / size as f64)
-        };
-        println!(
-            "{:>12}  {:>12}  {:>5.0}%  {}",
-            size,
-            comp,
-            ratio,
-            entry.name()
-        );
+        entries.push(EntryInfo {
+            name: entry.name().to_string(),
+            size: entry.size(),
+            compressed: entry.compressed_size(),
+            is_dir: entry.is_dir(),
+        });
     }
-
-    println!("{}", "-".repeat(60));
-    let total_ratio = if total_size == 0 {
-        0.0
-    } else {
-        100.0 * (1.0 - total_comp as f64 / total_size as f64)
-    };
-    println!(
-        "{:>12}  {:>12}  {:>5.0}%  {} file(s)",
-        total_size,
-        total_comp,
-        total_ratio,
-        zip.len()
-    );
-    Ok(())
+    Ok(entries)
 }
 
 struct Entry {
@@ -293,17 +296,4 @@ fn sanitize_windows_name(name: &str) -> String {
         cleaned.push('_');
     }
     cleaned
-}
-
-fn progress_bar(len: u64, verb: &str) -> ProgressBar {
-    let bar = ProgressBar::new(len);
-    bar.set_style(
-        ProgressStyle::with_template(
-            "{prefix:.bold.dim} [{bar:30.cyan/blue}] {pos}/{len} {wide_msg}",
-        )
-        .unwrap()
-        .progress_chars("=>-"),
-    );
-    bar.set_prefix(verb.to_string());
-    bar
 }
