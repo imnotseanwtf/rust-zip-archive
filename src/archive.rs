@@ -105,6 +105,28 @@ pub fn extract(
     archive: &Path,
     dest: &Path,
     force: bool,
+    progress: impl FnMut(Progress),
+) -> Result<()> {
+    extract_inner(archive, dest, None, force, progress)
+}
+
+/// Extract only the entries whose archive names appear in `names`.
+pub fn extract_selected(
+    archive: &Path,
+    dest: &Path,
+    names: &[String],
+    force: bool,
+    progress: impl FnMut(Progress),
+) -> Result<()> {
+    let set: std::collections::HashSet<&str> = names.iter().map(|s| s.as_str()).collect();
+    extract_inner(archive, dest, Some(set), force, progress)
+}
+
+fn extract_inner(
+    archive: &Path,
+    dest: &Path,
+    selected: Option<std::collections::HashSet<&str>>,
+    force: bool,
     mut progress: impl FnMut(Progress),
 ) -> Result<()> {
     let file =
@@ -117,6 +139,13 @@ pub fn extract(
     let total = zip.len() as u64;
     for i in 0..zip.len() {
         let mut entry = zip.by_index(i)?;
+
+        if let Some(set) = &selected {
+            if !set.contains(entry.name()) {
+                continue;
+            }
+        }
+
         let raw_name = entry
             .enclosed_name()
             .with_context(|| format!("unsafe path in archive: {}", entry.name()))?;

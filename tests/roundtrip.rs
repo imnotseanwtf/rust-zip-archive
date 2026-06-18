@@ -154,3 +154,41 @@ fn list_returns_entry_metadata() {
     assert!(entries[0].compressed > 0);
     assert!(!entries[0].is_dir);
 }
+
+#[test]
+fn extract_selected_only_writes_chosen_entries() {
+    use rust_zip_archive::archive;
+    use rust_zip_archive::cli::Compression;
+
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+    let src = root.join("sample");
+    write(&src.join("a.txt"), "aaa");
+    write(&src.join("b.txt"), "bbb");
+
+    let archive = root.join("a.zip");
+    archive::create(
+        &archive,
+        std::slice::from_ref(&src),
+        Compression::Deflate,
+        false,
+        |_p| {},
+    )
+    .unwrap();
+
+    let dest = root.join("out");
+    archive::extract_selected(
+        &archive,
+        &dest,
+        &["sample/a.txt".to_string()],
+        false,
+        |_p| {},
+    )
+    .unwrap();
+
+    assert!(dest.join("sample/a.txt").exists(), "selected file missing");
+    assert!(
+        !dest.join("sample/b.txt").exists(),
+        "unselected file extracted"
+    );
+}
