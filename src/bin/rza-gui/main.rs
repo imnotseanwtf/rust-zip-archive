@@ -1,6 +1,8 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod app;
+#[allow(dead_code)] // Task 4 will consume this module
+mod tree;
 
 use app::RzaApp;
 use eframe::egui;
