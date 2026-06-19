@@ -69,6 +69,32 @@ rza extract backup.zip --dest ./restored
 rza c -o backup.zip src/
 ```
 
+## GUI
+
+`rza` also ships an optional native desktop GUI (egui), built behind the `gui`
+feature so the CLI stays lightweight.
+
+```sh
+# build & run the GUI
+cargo run --features gui --bin rza-gui
+
+# or build it
+cargo build --release --features gui   # target/release/rza-gui[.exe]
+```
+
+In the window you can:
+- **Open Archive…** to browse a `.zip`'s contents and **Extract All** or
+  **Extract Selected** (tick the boxes).
+- **New Archive…** or **drag-and-drop** files in, pick a compression method,
+  and **Create…** a new `.zip`.
+
+On Linux, building the GUI needs a few system libraries:
+
+```sh
+sudo apt-get install -y libxkbcommon-dev libwayland-dev libxcb1-dev \
+  libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev libgl1-mesa-dev
+```
+
 ## Releasing
 
 Prebuilt binaries for Linux, macOS (Intel + Apple Silicon), and Windows are
@@ -87,4 +113,3 @@ GitHub Release.
 - `.tar`, `.tar.gz`, `.tar.zst` support via the `tar` + `flate2`/`zstd` crates
 - `xz` support via `xz2`
 - Password-protected (AES) zips
-- A TUI or GUI front end
