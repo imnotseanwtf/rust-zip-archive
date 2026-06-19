@@ -29,7 +29,6 @@ enum JobMsg {
     Done(Result<(), String>),
 }
 
-#[derive(Default)]
 struct RzaApp {
     /// Currently opened archive (Browse mode).
     archive_path: Option<PathBuf>,
@@ -38,6 +37,23 @@ struct RzaApp {
     job: Option<Receiver<JobMsg>>,
     progress: Option<Progress>,
     status: String,
+    /// Files staged for a new archive (Create mode).
+    staged: Vec<PathBuf>,
+    method: rust_zip_archive::cli::Compression,
+}
+
+impl Default for RzaApp {
+    fn default() -> Self {
+        Self {
+            archive_path: None,
+            rows: Vec::new(),
+            job: None,
+            progress: None,
+            status: String::new(),
+            staged: Vec::new(),
+            method: rust_zip_archive::cli::Compression::Deflate,
+        }
+    }
 }
 
 impl RzaApp {
@@ -110,6 +126,34 @@ impl RzaApp {
         });
     }
 
+    fn start_create(&mut self, ctx: &egui::Context) {
+        if self.staged.is_empty() {
+            self.status = "Add files first (drag them in or use New Archive…).".into();
+            return;
+        }
+        let Some(output) = rfd::FileDialog::new()
+            .add_filter("zip", &["zip"])
+            .set_file_name("archive.zip")
+            .save_file()
+        else {
+            return;
+        };
+        let inputs = self.staged.clone();
+        let method = self.method;
+        let ctx2 = ctx.clone();
+        self.spawn_job(ctx, move |tx| {
+            let send_progress = {
+                let tx = tx.clone();
+                move |p: Progress| {
+                    let _ = tx.send(JobMsg::Progress(p));
+                    ctx2.request_repaint();
+                }
+            };
+            let result = archive::create(&output, &inputs, method, true, send_progress);
+            let _ = tx.send(JobMsg::Done(result.map_err(|e| format!("{e:#}"))));
+        });
+    }
+
     /// Drain worker messages once per frame.
     fn poll_job(&mut self) {
         let mut finished = false;
@@ -142,6 +186,18 @@ impl eframe::App for RzaApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.poll_job();
 
+        let dropped: Vec<PathBuf> = ctx.input(|i| {
+            i.raw
+                .dropped_files
+                .iter()
+                .filter_map(|f| f.path.clone())
+                .collect()
+        });
+        if !dropped.is_empty() {
+            self.staged.extend(dropped);
+            self.status = format!("{} file(s) staged", self.staged.len());
+        }
+
         egui::TopBottomPanel::top("toolbar").show(ctx, |ui| {
             ui.add_enabled_ui(!self.busy(), |ui| {
                 ui.horizontal(|ui| {
@@ -153,6 +209,12 @@ impl eframe::App for RzaApp {
                             self.open_archive(path);
                         }
                     }
+                    if ui.button("New Archive…").clicked() {
+                        if let Some(files) = rfd::FileDialog::new().pick_files() {
+                            self.staged.extend(files);
+                            self.status = format!("{} file(s) staged", self.staged.len());
+                        }
+                    }
                     if let Some(p) = &self.archive_path {
                         ui.label(format!("Open: {}", p.display()));
                     }
@@ -161,6 +223,27 @@ impl eframe::App for RzaApp {
         });
 
         egui::TopBottomPanel::bottom("actions").show(ctx, |ui| {
+            ui.add_enabled_ui(!self.busy(), |ui| {
+                ui.horizontal(|ui| {
+                    egui::ComboBox::from_label("Method")
+                        .selected_text(format!("{:?}", self.method))
+                        .show_ui(ui, |ui| {
+                            use rust_zip_archive::cli::Compression::*;
+                            for m in [Store, Deflate, Bzip2, Zstd] {
+                                ui.selectable_value(&mut self.method, m, format!("{m:?}"));
+                            }
+                        });
+                    if ui.button("Create…").clicked() {
+                        self.start_create(ctx);
+                    }
+                    if !self.staged.is_empty() {
+                        ui.label(format!("{} staged", self.staged.len()));
+                        if ui.button("Clear").clicked() {
+                            self.staged.clear();
+                        }
+                    }
+                });
+            });
             ui.add_enabled_ui(!self.busy() && self.archive_path.is_some(), |ui| {
                 ui.horizontal(|ui| {
                     if ui.button("Extract Selected…").clicked() {
