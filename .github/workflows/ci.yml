@@ -65,3 +65,5 @@ jobs:
             libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev libgl1-mesa-dev
       - name: Build GUI
         run: cargo build --features gui --bin rza-gui
+      - name: Test GUI bin
+        run: cargo test --features gui --bin rza-gui
