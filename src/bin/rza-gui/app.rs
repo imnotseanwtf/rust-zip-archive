@@ -25,6 +25,8 @@ pub(crate) struct RzaApp {
     /// Files staged for a new archive (Create mode).
     staged: Vec<PathBuf>,
     method: rust_zip_archive::cli::Compression,
+    /// Whether the Info window is open.
+    info_open: bool,
 }
 
 impl Default for RzaApp {
@@ -39,6 +41,7 @@ impl Default for RzaApp {
             status: String::new(),
             staged: Vec::new(),
             method: rust_zip_archive::cli::Compression::Deflate,
+            info_open: false,
         }
     }
 }
@@ -101,6 +104,24 @@ impl RzaApp {
             } else {
                 archive::extract(&archive_path, &dest, true, send_progress)
             };
+            let _ = tx.send(JobMsg::Done(result.map_err(|e| format!("{e:#}"))));
+        });
+    }
+
+    fn start_test(&mut self, ctx: &egui::Context) {
+        let Some(archive_path) = self.archive_path.clone() else {
+            return;
+        };
+        let ctx2 = ctx.clone();
+        self.spawn_job(ctx, move |tx| {
+            let send = {
+                let tx = tx.clone();
+                move |p: Progress| {
+                    let _ = tx.send(JobMsg::Progress(p));
+                    ctx2.request_repaint();
+                }
+            };
+            let result = archive::test(&archive_path, send);
             let _ = tx.send(JobMsg::Done(result.map_err(|e| format!("{e:#}"))));
         });
     }
@@ -180,25 +201,31 @@ impl eframe::App for RzaApp {
         egui::TopBottomPanel::top("toolbar").show(ctx, |ui| {
             ui.add_enabled_ui(!self.busy(), |ui| {
                 ui.horizontal(|ui| {
-                    if ui.button("Open Archive\u{2026}").clicked() {
+                    if ui.button("\u{1f4c2} Open").clicked() {
                         if let Some(path) = rfd::FileDialog::new()
                             .add_filter(
                                 "Archives",
-                                &["zip", "tar", "gz", "tgz", "bz2", "xz", "zst", "7z", "rar"],
+                                &["zip", "tar", "gz", "tgz", "bz2", "xz", "zst"],
                             )
                             .pick_file()
                         {
                             self.open_archive(path);
                         }
                     }
-                    if ui.button("New Archive\u{2026}").clicked() {
+                    if ui.button("\u{2795} Add").clicked() {
                         if let Some(files) = rfd::FileDialog::new().pick_files() {
                             self.staged.extend(files);
                             self.status = format!("{} file(s) staged", self.staged.len());
                         }
                     }
-                    if let Some(p) = &self.archive_path {
-                        ui.label(format!("Open: {}", p.display()));
+                    if ui.button("\u{2b06} Extract").clicked() {
+                        self.start_extract(ctx, !self.selected.is_empty());
+                    }
+                    if ui.button("\u{2713} Test").clicked() {
+                        self.start_test(ctx);
+                    }
+                    if ui.button("\u{2139} Info").clicked() {
+                        self.info_open = true;
                     }
                 });
             });
@@ -223,16 +250,6 @@ impl eframe::App for RzaApp {
                         if ui.button("Clear").clicked() {
                             self.staged.clear();
                         }
-                    }
-                });
-            });
-            ui.add_enabled_ui(!self.busy() && self.archive_path.is_some(), |ui| {
-                ui.horizontal(|ui| {
-                    if ui.button("Extract Selected\u{2026}").clicked() {
-                        self.start_extract(ctx, true);
-                    }
-                    if ui.button("Extract All\u{2026}").clicked() {
-                        self.start_extract(ctx, false);
                     }
                 });
             });
@@ -292,6 +309,13 @@ impl eframe::App for RzaApp {
             let selected_snapshot: HashSet<String> = self.selected.clone();
             let mut toggle_file: Option<String> = None;
             let mut clear_selection = false;
+            // Deferred context-menu actions (same pattern as toggle_file / enter_dir):
+            // we cannot call self.start_extract / mutate self.selected inside the
+            // row closure because `nodes` borrows `self.entries`. Instead we record
+            // the intent and execute it after the table block.
+            let mut ctx_extract_one: Option<String> = None;
+            let mut ctx_extract_selected = false;
+            let mut ctx_show_info = false;
 
             use egui_extras::{Column, TableBuilder};
             TableBuilder::new(ui)
@@ -340,6 +364,20 @@ impl eframe::App for RzaApp {
                                 if resp.double_clicked() && node.is_dir {
                                     enter_dir = Some(node.full_path.clone());
                                 }
+                                resp.context_menu(|ui| {
+                                    if !node.is_dir && ui.button("Extract this\u{2026}").clicked() {
+                                        ctx_extract_one = Some(node.full_path.clone());
+                                        ui.close_menu();
+                                    }
+                                    if ui.button("Extract selected\u{2026}").clicked() {
+                                        ctx_extract_selected = true;
+                                        ui.close_menu();
+                                    }
+                                    if ui.button("Info").clicked() {
+                                        ctx_show_info = true;
+                                        ui.close_menu();
+                                    }
+                                });
                             });
                             row.col(|ui| {
                                 ui.label(if node.is_dir {
@@ -381,7 +419,43 @@ impl eframe::App for RzaApp {
                 self.current_dir = dir;
                 self.selected.clear();
             }
+
+            // Apply deferred context-menu actions.
+            if let Some(path) = ctx_extract_one {
+                self.selected.clear();
+                self.selected.insert(path);
+                self.start_extract(ctx, true);
+            }
+            if ctx_extract_selected {
+                self.start_extract(ctx, true);
+            }
+            if ctx_show_info {
+                self.info_open = true;
+            }
         });
+
+        // Info window (rendered outside the central panel).
+        if self.info_open {
+            let mut open = self.info_open;
+            egui::Window::new("Archive info")
+                .open(&mut open)
+                .show(ctx, |ui| {
+                    if let Some(p) = &self.archive_path {
+                        ui.label(format!("Path: {}", p.display()));
+                    }
+                    let files = self.entries.iter().filter(|e| !e.is_dir).count();
+                    let total: u64 = self.entries.iter().map(|e| e.size).sum();
+                    let packed: u64 = self.entries.iter().map(|e| e.compressed).sum();
+                    ui.label(format!("Entries: {files} file(s)"));
+                    ui.label(format!("Total size: {}", human_size(total)));
+                    ui.label(format!("Packed size: {}", human_size(packed)));
+                    if total > 0 {
+                        let ratio = 100.0 * (1.0 - packed as f64 / total as f64);
+                        ui.label(format!("Overall ratio: {ratio:.0}%"));
+                    }
+                });
+            self.info_open = open;
+        }
     }
 }
 
