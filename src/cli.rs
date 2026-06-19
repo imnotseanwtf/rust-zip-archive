@@ -1,7 +1,7 @@
 use clap::{Parser, Subcommand, ValueEnum};
 use std::path::PathBuf;
 
-/// rza — a simple 7-Zip/WinRAR-style archive utility.
+/// rza — a small multi-format archive utility (zip, tar, tar.gz/bz2/xz/zst, gz/bz2/xz/zst).
 #[derive(Parser, Debug)]
 #[command(name = "rza", version, about, long_about = None)]
 pub struct Cli {
@@ -11,10 +11,12 @@ pub struct Cli {
 
 #[derive(Subcommand, Debug)]
 pub enum Command {
-    /// Create a new .zip archive from files and/or directories.
+    /// Create a new archive from files and/or directories.
     #[command(visible_alias = "c")]
     Create {
-        /// Path of the archive to create (e.g. backup.zip).
+        /// Path of the archive to create. The format is chosen by the
+        /// extension: .zip, .tar, .tar.gz/.tgz, .tar.bz2, .tar.xz, .tar.zst,
+        /// or single-file .gz/.bz2/.xz/.zst.
         #[arg(short, long)]
         output: PathBuf,
 
@@ -22,7 +24,8 @@ pub enum Command {
         #[arg(required = true)]
         inputs: Vec<PathBuf>,
 
-        /// Compression method to use.
+        /// Compression method (applies to .zip only; other formats use the
+        /// compression implied by their extension).
         #[arg(short, long, value_enum, default_value_t = Compression::Deflate)]
         method: Compression,
 
@@ -31,7 +34,7 @@ pub enum Command {
         force: bool,
     },
 
-    /// Extract the contents of a .zip archive.
+    /// Extract the contents of an archive.
     #[command(visible_alias = "x")]
     Extract {
         /// Archive to extract.
@@ -46,7 +49,7 @@ pub enum Command {
         force: bool,
     },
 
-    /// List the contents of a .zip archive.
+    /// List the contents of an archive.
     #[command(visible_alias = "l")]
     List {
         /// Archive to inspect.

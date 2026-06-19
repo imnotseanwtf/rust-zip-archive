@@ -132,7 +132,7 @@ impl RzaApp {
             return;
         }
         let Some(output) = rfd::FileDialog::new()
-            .add_filter("zip", &["zip"])
+            .add_filter("Archives", &["zip", "tar", "gz", "tgz", "bz2", "xz", "zst"])
             .set_file_name("archive.zip")
             .save_file()
         else {
@@ -203,7 +203,10 @@ impl eframe::App for RzaApp {
                 ui.horizontal(|ui| {
                     if ui.button("Open Archive…").clicked() {
                         if let Some(path) = rfd::FileDialog::new()
-                            .add_filter("zip", &["zip"])
+                            .add_filter(
+                                "Archives",
+                                &["zip", "tar", "gz", "tgz", "bz2", "xz", "zst", "7z", "rar"],
+                            )
                             .pick_file()
                         {
                             self.open_archive(path);

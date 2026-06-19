@@ -2,20 +2,30 @@
 
 [![CI](https://github.com/imnotseanwtf/rust-zip-archive/actions/workflows/ci.yml/badge.svg)](https://github.com/imnotseanwtf/rust-zip-archive/actions/workflows/ci.yml)
 
-A small 7-Zip/WinRAR-style command-line archive utility written in Rust.
+A small multi-format command-line archive utility written in Rust.
 Runs on **Linux, macOS, and Windows** — every push is built and tested on all three.
 
 ## Features (v1)
 
-- **Create** `.zip` archives from files and directories
-- **Extract** archives (with safe path handling — no zip-slip)
-- **List** archive contents with sizes and compression ratios
-- Selectable compression: `store`, `deflate`, `bzip2`, `zstd`
+- **Create**, **extract**, and **list** archives in multiple formats
+- Safe path handling — no zip-slip
+- Selectable compression for `.zip`: `store`, `deflate`, `bzip2`, `zstd`
 - Progress bars for create/extract
 - Streams files instead of buffering them in memory (safe for large files)
 - Preserves Unix file permissions (executable bit) on Linux/macOS
 - Windows-safe extraction: reserved device names (`CON`, `NUL`, …) and illegal
   filename characters are rewritten automatically
+
+## Supported formats
+
+| Format | List | Extract | Create |
+|--------|------|---------|--------|
+| `.zip` | yes | yes | yes |
+| `.tar`, `.tar.gz`/`.tgz`, `.tar.bz2`, `.tar.xz`, `.tar.zst` | yes | yes | yes |
+| `.gz`, `.bz2`, `.xz`, `.zst` (single file) | yes | yes | yes |
+
+The format is auto-detected on extract/list (by content), and chosen from the
+output extension on create. `--method` applies to `.zip` only.
 
 ## Install
 
@@ -110,6 +120,4 @@ GitHub Release.
 
 ## Roadmap ideas
 
-- `.tar`, `.tar.gz`, `.tar.zst` support via the `tar` + `flate2`/`zstd` crates
-- `xz` support via `xz2`
 - Password-protected (AES) zips
