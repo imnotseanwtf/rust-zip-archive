@@ -5,6 +5,27 @@
 A small multi-format command-line archive utility written in Rust.
 Runs on **Linux, macOS, and Windows** — every push is built and tested on all three.
 
+## Install the app
+
+Download the installer for your OS from the
+[Releases page](https://github.com/imnotseanwtf/rust-zip-archive/releases):
+
+- **Windows:** run the `.msi` / `.exe` installer → launch **rza — Archive
+  Utility** from the Start menu.
+- **macOS:** open the `.dmg` and drag the app to Applications. The build is
+  unsigned, so the first launch needs **right-click → Open** once (Gatekeeper).
+- **Linux:** install the `.deb` (`sudo apt install ./rza_*.deb`) or run the
+  `.AppImage` (`chmod +x rza_*.AppImage && ./rza_*.AppImage`).
+
+The installer registers `rza` (the CLI) and `rza-gui` (the window) and
+associates archive types (`.zip`, `.tar`, `.tar.gz`, `.tar.xz`, `.tar.zst`,
+`.gz`, `.bz2`, `.xz`, `.zst`) so you can **open an archive with the app**.
+
+> Windows shows a SmartScreen warning for unsigned installers — choose
+> **More info → Run anyway**. On macOS use right-click → Open the first time.
+> (Double-click-to-open an archive works on Windows/Linux; on macOS launch the
+> app or use `open -a "rza — Archive Utility" file.zip` for now.)
+
 ## Features (v1)
 
 - **Create**, **extract**, and **list** archives in multiple formats
