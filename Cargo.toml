@@ -33,7 +33,7 @@ gui = ["dep:eframe", "dep:egui", "dep:rfd"]
 
 [[bin]]
 name = "rza-gui"
-path = "src/bin/rza-gui.rs"
+path = "src/bin/rza-gui/main.rs"
 required-features = ["gui"]
 
 [dev-dependencies]
