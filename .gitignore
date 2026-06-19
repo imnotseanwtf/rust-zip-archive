@@ -3,3 +3,6 @@
 
 # test/output archives
 backup.zip
+
+# packager output
+/dist

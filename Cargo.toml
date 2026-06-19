@@ -42,3 +42,19 @@ tempfile = "3"
 [profile.release]
 opt-level = 3
 lto = true
+
+[package.metadata.packager]
+product-name = "rza — Archive Utility"
+identifier = "com.imnotseanwtf.rza"
+description = "A multi-format archive utility (zip, tar, gz, bz2, xz, zst)."
+authors = ["imnotseanwtf"]
+icons = ["assets/icon.png"]
+before-packaging-command = "cargo build --release --features gui"
+binaries = [
+  { path = "rza-gui", main = true },
+  { path = "rza" },
+]
+
+[[package.metadata.packager.file-associations]]
+extensions = ["zip", "tar", "gz", "tgz", "bz2", "xz", "zst"]
+description = "Archive"
