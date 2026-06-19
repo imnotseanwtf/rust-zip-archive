@@ -18,6 +18,11 @@ clap = { version = "4.5", features = ["derive"] }
 zip = { version = "2.2", features = ["deflate", "bzip2", "zstd", "time"] }
 walkdir = "2.5"
 anyhow = "1.0"
+tar = "0.4"
+flate2 = "1"
+bzip2 = "0.5"
+xz2 = "0.1"
+zstd = "0.13"
 indicatif = "0.17"
 eframe = { version = "0.29", optional = true }
 egui = { version = "0.29", optional = true }

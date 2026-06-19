@@ -1,6 +1,7 @@
 //! Multi-format archive API. Detects the format and dispatches to a backend.
 
 pub mod format;
+mod tar;
 mod zip;
 
 use anyhow::{bail, Result};
@@ -41,6 +42,9 @@ pub fn create(
 ) -> Result<()> {
     match format::detect_for_write(output)? {
         Format::Zip => zip::create(output, inputs, compression, force, progress),
+        f @ (Format::Tar | Format::TarGz | Format::TarBz2 | Format::TarXz | Format::TarZst) => {
+            tar::create(output, inputs, f, force, progress)
+        }
         other => bail!("creating {:?} archives is not supported yet", other),
     }
 }
@@ -48,6 +52,9 @@ pub fn create(
 pub fn list(archive: &Path) -> Result<Vec<EntryInfo>> {
     match format::detect_for_read(archive)? {
         Format::Zip => zip::list(archive),
+        f @ (Format::Tar | Format::TarGz | Format::TarBz2 | Format::TarXz | Format::TarZst) => {
+            tar::list(archive, f)
+        }
         other => bail!("listing {:?} archives is not supported yet", other),
     }
 }
@@ -60,6 +67,9 @@ pub fn extract(
 ) -> Result<()> {
     match format::detect_for_read(archive)? {
         Format::Zip => zip::extract(archive, dest, force, progress),
+        f @ (Format::Tar | Format::TarGz | Format::TarBz2 | Format::TarXz | Format::TarZst) => {
+            tar::extract(archive, dest, f, force, progress)
+        }
         other => bail!("extracting {:?} archives is not supported yet", other),
     }
 }
@@ -73,6 +83,9 @@ pub fn extract_selected(
 ) -> Result<()> {
     match format::detect_for_read(archive)? {
         Format::Zip => zip::extract_selected(archive, dest, names, force, progress),
+        f @ (Format::Tar | Format::TarGz | Format::TarBz2 | Format::TarXz | Format::TarZst) => {
+            tar::extract_selected(archive, dest, names, f, force, progress)
+        }
         other => bail!("extracting {:?} archives is not supported yet", other),
     }
 }
