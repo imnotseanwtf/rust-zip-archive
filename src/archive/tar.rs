@@ -61,10 +61,10 @@ pub(crate) fn create(
             b.into_inner()?.finish()?;
         }
         Format::TarZst => {
-            let enc = zstd::stream::write::Encoder::new(w, 0)?.auto_finish();
+            let enc = zstd::stream::write::Encoder::new(w, 0)?;
             let mut b = tar::Builder::new(enc);
             write_entries(&mut b, &entries, progress)?;
-            b.into_inner()?; // auto_finish writer finalizes on drop
+            b.into_inner()?.finish()?; // propagate frame-flush errors
         }
         other => bail!("tar backend cannot create {:?}", other),
     }
