@@ -1,5 +1,6 @@
 //! Multi-format archive API. Detects the format and dispatches to a backend.
 
+mod compressor;
 pub mod format;
 mod tar;
 mod zip;
@@ -40,21 +41,33 @@ pub fn create(
     force: bool,
     progress: impl FnMut(Progress),
 ) -> Result<()> {
-    match format::detect_for_write(output)? {
+    let format = format::detect_for_write(output)?;
+    match format {
         Format::Zip => zip::create(output, inputs, compression, force, progress),
-        f @ (Format::Tar | Format::TarGz | Format::TarBz2 | Format::TarXz | Format::TarZst) => {
-            tar::create(output, inputs, f, force, progress)
+        Format::Tar | Format::TarGz | Format::TarBz2 | Format::TarXz | Format::TarZst => {
+            tar::create(output, inputs, format, force, progress)
+        }
+        Format::Gz | Format::Bz2 | Format::Xz | Format::Zst => {
+            if inputs.len() != 1 || inputs[0].is_dir() {
+                bail!(
+                    "{:?} compresses a single file; use a .tar.* format to archive multiple files or a directory",
+                    format
+                );
+            }
+            compressor::create(output, &inputs[0], format, force, progress)
         }
         other => bail!("creating {:?} archives is not supported yet", other),
     }
 }
 
 pub fn list(archive: &Path) -> Result<Vec<EntryInfo>> {
-    match format::detect_for_read(archive)? {
+    let format = format::detect_for_read(archive)?;
+    match format {
         Format::Zip => zip::list(archive),
-        f @ (Format::Tar | Format::TarGz | Format::TarBz2 | Format::TarXz | Format::TarZst) => {
-            tar::list(archive, f)
+        Format::Tar | Format::TarGz | Format::TarBz2 | Format::TarXz | Format::TarZst => {
+            tar::list(archive, format)
         }
+        Format::Gz | Format::Bz2 | Format::Xz | Format::Zst => compressor::list(archive, format),
         other => bail!("listing {:?} archives is not supported yet", other),
     }
 }
@@ -65,10 +78,14 @@ pub fn extract(
     force: bool,
     progress: impl FnMut(Progress),
 ) -> Result<()> {
-    match format::detect_for_read(archive)? {
+    let format = format::detect_for_read(archive)?;
+    match format {
         Format::Zip => zip::extract(archive, dest, force, progress),
-        f @ (Format::Tar | Format::TarGz | Format::TarBz2 | Format::TarXz | Format::TarZst) => {
-            tar::extract(archive, dest, f, force, progress)
+        Format::Tar | Format::TarGz | Format::TarBz2 | Format::TarXz | Format::TarZst => {
+            tar::extract(archive, dest, format, force, progress)
+        }
+        Format::Gz | Format::Bz2 | Format::Xz | Format::Zst => {
+            compressor::extract(archive, dest, format, force, progress)
         }
         other => bail!("extracting {:?} archives is not supported yet", other),
     }
@@ -81,10 +98,14 @@ pub fn extract_selected(
     force: bool,
     progress: impl FnMut(Progress),
 ) -> Result<()> {
-    match format::detect_for_read(archive)? {
+    let format = format::detect_for_read(archive)?;
+    match format {
         Format::Zip => zip::extract_selected(archive, dest, names, force, progress),
-        f @ (Format::Tar | Format::TarGz | Format::TarBz2 | Format::TarXz | Format::TarZst) => {
-            tar::extract_selected(archive, dest, names, f, force, progress)
+        Format::Tar | Format::TarGz | Format::TarBz2 | Format::TarXz | Format::TarZst => {
+            tar::extract_selected(archive, dest, names, format, force, progress)
+        }
+        Format::Gz | Format::Bz2 | Format::Xz | Format::Zst => {
+            compressor::extract(archive, dest, format, force, progress)
         }
         other => bail!("extracting {:?} archives is not supported yet", other),
     }
