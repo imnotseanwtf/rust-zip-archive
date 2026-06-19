@@ -104,6 +104,27 @@ fn open_decoder(archive: &Path, format: Format) -> Result<Box<dyn Read>> {
     })
 }
 
+pub(crate) fn test(
+    archive: &Path,
+    format: Format,
+    mut progress: impl FnMut(Progress),
+) -> Result<()> {
+    progress(Progress {
+        current: 0,
+        total: 1,
+        message: inner_name(archive, format),
+    });
+    let mut dec = open_decoder(archive, format)?;
+    std::io::copy(&mut dec, &mut std::io::sink())
+        .with_context(|| format!("verifying {}", archive.display()))?;
+    progress(Progress {
+        current: 1,
+        total: 1,
+        message: "ok".into(),
+    });
+    Ok(())
+}
+
 pub(crate) fn list(archive: &Path, format: Format) -> Result<Vec<EntryInfo>> {
     // gzip stores the uncompressed size in the trailing 4 bytes (ISIZE).
     let size = if format == Format::Gz {

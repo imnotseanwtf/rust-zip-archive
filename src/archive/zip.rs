@@ -114,6 +114,31 @@ pub(crate) fn extract_selected(
     extract_inner(archive, dest, Some(set), force, progress)
 }
 
+pub(crate) fn test(archive: &Path, mut progress: impl FnMut(Progress)) -> Result<()> {
+    let file =
+        File::open(archive).with_context(|| format!("opening archive {}", archive.display()))?;
+    let mut zip = ZipArchive::new(BufReader::new(file))
+        .with_context(|| format!("reading archive {}", archive.display()))?;
+    let total = zip.len() as u64;
+    for i in 0..zip.len() {
+        let mut entry = zip.by_index(i)?;
+        let name = entry.name().to_string();
+        progress(Progress {
+            current: i as u64,
+            total,
+            message: name.clone(),
+        });
+        // Reading the whole entry validates the CRC (zip checks it on read end).
+        io::copy(&mut entry, &mut io::sink()).with_context(|| format!("verifying {name}"))?;
+    }
+    progress(Progress {
+        current: total,
+        total,
+        message: "ok".into(),
+    });
+    Ok(())
+}
+
 fn extract_inner(
     archive: &Path,
     dest: &Path,

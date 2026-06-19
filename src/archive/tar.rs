@@ -117,6 +117,34 @@ fn with_reader<T>(
     f(tar::Archive::new(inner))
 }
 
+pub(crate) fn test(
+    archive: &Path,
+    format: Format,
+    mut progress: impl FnMut(Progress),
+) -> Result<()> {
+    with_reader(archive, format, |mut ar| {
+        let mut idx = 0u64;
+        for entry in ar.entries()? {
+            let mut entry = entry?;
+            let name = entry.path()?.to_string_lossy().to_string();
+            progress(Progress {
+                current: idx,
+                total: 0,
+                message: name.clone(),
+            });
+            idx += 1;
+            std::io::copy(&mut entry, &mut std::io::sink())
+                .with_context(|| format!("verifying {name}"))?;
+        }
+        progress(Progress {
+            current: idx,
+            total: idx,
+            message: "ok".into(),
+        });
+        Ok(())
+    })
+}
+
 pub(crate) fn list(archive: &Path, format: Format) -> Result<Vec<EntryInfo>> {
     with_reader(archive, format, |mut ar| {
         let mut out = Vec::new();

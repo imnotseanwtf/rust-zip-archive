@@ -91,6 +91,20 @@ pub fn extract(
     }
 }
 
+pub fn test(archive: &Path, progress: impl FnMut(Progress)) -> Result<()> {
+    let format = format::detect_for_read(archive)?;
+    match format {
+        Format::Zip => zip::test(archive, progress),
+        Format::Tar | Format::TarGz | Format::TarBz2 | Format::TarXz | Format::TarZst => {
+            tar::test(archive, format, progress)
+        }
+        Format::Gz | Format::Bz2 | Format::Xz | Format::Zst => {
+            compressor::test(archive, format, progress)
+        }
+        other => bail!("testing {:?} archives is not supported yet", other),
+    }
+}
+
 pub fn extract_selected(
     archive: &Path,
     dest: &Path,
