@@ -26,6 +26,20 @@ associates archive types (`.zip`, `.tar`, `.tar.gz`, `.tar.xz`, `.tar.zst`,
 > (Double-click-to-open an archive works on Windows/Linux; on macOS launch the
 > app or use `open -a "rza — Archive Utility" file.zip` for now.)
 
+### Right-click menu
+
+After installing, archives get an **rza** menu in your file manager:
+
+- **Windows:** right-click an archive → (on Windows 11, **Show more options** →)
+  **rza ▸** → **Extract Here**, **Extract to folder**, or **Open with rza**.
+  Right-click any file/folder → **Add to archive (rza)…** opens the app ready to
+  create a new archive.
+- **Linux:** right-click an archive → **Open With → rza — Archive Utility**.
+
+These call the same engine as the CLI (`rza extract-here` / `rza extract-to`).
+
+> Note: on Windows, uninstalling does not currently remove the rza right-click entries automatically (a packaging-tool limitation); they can be removed manually from the registry if desired.
+
 ## Features (v1)
 
 - **Create**, **extract**, and **list** archives in multiple formats
