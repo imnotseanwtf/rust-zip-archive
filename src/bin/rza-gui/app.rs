@@ -47,6 +47,11 @@ impl Default for RzaApp {
 }
 
 impl RzaApp {
+    pub(crate) fn stage_paths(&mut self, paths: Vec<PathBuf>) {
+        self.staged.extend(paths);
+        self.status = format!("{} file(s) staged", self.staged.len());
+    }
+
     pub(crate) fn open_archive(&mut self, path: PathBuf) {
         match archive::list(&path) {
             Ok(entries) => {
