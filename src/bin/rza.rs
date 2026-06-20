@@ -40,6 +40,23 @@ fn extract_to_dir(archive: &Path) -> PathBuf {
     parent.join(stem)
 }
 
+/// Output archive path for a quick-compress action: the item's parent dir +
+/// base name + `ext`. Base name is the directory name for a folder, or the file
+/// stem (last extension removed) for a file. `ext` includes the leading dot.
+fn archive_output(path: &Path, ext: &str) -> PathBuf {
+    let parent = path
+        .parent()
+        .filter(|p| !p.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
+    let base = if path.is_dir() {
+        path.file_name().map(|s| s.to_string_lossy().to_string())
+    } else {
+        path.file_stem().map(|s| s.to_string_lossy().to_string())
+    }
+    .unwrap_or_default();
+    parent.join(format!("{base}{ext}"))
+}
+
 fn make_bar(verb: &str) -> ProgressBar {
     let bar = ProgressBar::new(0);
     bar.set_style(
@@ -106,6 +123,50 @@ fn main() -> Result<()> {
                 bar.set_message(p.message);
             })?;
             bar.finish_with_message(format!("Extracted into {}", dest.display()));
+        }
+
+        Command::Test { archive } => {
+            let bar = make_bar("Testing");
+            rust_zip_archive::archive::test(&archive, |p: Progress| {
+                bar.set_length(p.total);
+                bar.set_position(p.current);
+                bar.set_message(p.message);
+            })?;
+            bar.finish_with_message(format!("OK — {} is valid", archive.display()));
+        }
+
+        Command::CompressZip { path } => {
+            let output = archive_output(&path, ".zip");
+            let bar = make_bar("Archiving");
+            rust_zip_archive::archive::create(
+                &output,
+                std::slice::from_ref(&path),
+                rust_zip_archive::cli::Compression::Deflate,
+                false,
+                |p: Progress| {
+                    bar.set_length(p.total);
+                    bar.set_position(p.current);
+                    bar.set_message(p.message);
+                },
+            )?;
+            bar.finish_with_message(format!("Created {}", output.display()));
+        }
+
+        Command::CompressTargz { path } => {
+            let output = archive_output(&path, ".tar.gz");
+            let bar = make_bar("Archiving");
+            rust_zip_archive::archive::create(
+                &output,
+                std::slice::from_ref(&path),
+                rust_zip_archive::cli::Compression::Deflate,
+                false,
+                |p: Progress| {
+                    bar.set_length(p.total);
+                    bar.set_position(p.current);
+                    bar.set_message(p.message);
+                },
+            )?;
+            bar.finish_with_message(format!("Created {}", output.display()));
         }
 
         Command::List { archive } => {
@@ -180,6 +241,51 @@ mod tests {
         assert_eq!(
             extract_to_dir(Path::new("/tmp/a/weird.bin")),
             PathBuf::from("/tmp/a/weird.bin_extracted")
+        );
+    }
+
+    use super::archive_output;
+
+    #[test]
+    fn output_strips_file_extension() {
+        assert_eq!(
+            archive_output(Path::new("/x/report.docx"), ".zip"),
+            PathBuf::from("/x/report.zip")
+        );
+    }
+
+    #[test]
+    fn output_no_extension_appends() {
+        assert_eq!(
+            archive_output(Path::new("/x/notes"), ".zip"),
+            PathBuf::from("/x/notes.zip")
+        );
+    }
+
+    #[test]
+    fn output_two_part_ext() {
+        assert_eq!(
+            archive_output(Path::new("/x/report.docx"), ".tar.gz"),
+            PathBuf::from("/x/report.tar.gz")
+        );
+    }
+
+    #[test]
+    fn output_folder_uses_dir_name() {
+        let dir = tempfile::tempdir().unwrap();
+        let photos = dir.path().join("photos");
+        std::fs::create_dir(&photos).unwrap();
+        assert_eq!(
+            archive_output(&photos, ".zip"),
+            dir.path().join("photos.zip")
+        );
+    }
+
+    #[test]
+    fn output_empty_parent_uses_dot() {
+        assert_eq!(
+            archive_output(Path::new("report.docx"), ".zip"),
+            Path::new(".").join("report.zip")
         );
     }
 }

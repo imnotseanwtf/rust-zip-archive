@@ -67,6 +67,24 @@ pub enum Command {
         /// Archive to extract.
         archive: PathBuf,
     },
+
+    /// Test the integrity of an archive (reads every entry to verify it).
+    Test {
+        /// Archive to test.
+        archive: PathBuf,
+    },
+
+    /// Compress a file or folder into a .zip next to it (shell quick-compress).
+    CompressZip {
+        /// File or folder to compress.
+        path: PathBuf,
+    },
+
+    /// Compress a file or folder into a .tar.gz next to it (shell quick-compress).
+    CompressTargz {
+        /// File or folder to compress.
+        path: PathBuf,
+    },
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
