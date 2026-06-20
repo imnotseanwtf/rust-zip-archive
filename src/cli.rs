@@ -55,6 +55,18 @@ pub enum Command {
         /// Archive to inspect.
         archive: PathBuf,
     },
+
+    /// Extract an archive into the folder that contains it (for shell "Extract Here").
+    ExtractHere {
+        /// Archive to extract.
+        archive: PathBuf,
+    },
+
+    /// Extract an archive into a new subfolder named after it (for shell "Extract to name\").
+    ExtractTo {
+        /// Archive to extract.
+        archive: PathBuf,
+    },
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]

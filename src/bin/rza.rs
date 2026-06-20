@@ -1,9 +1,44 @@
+use std::path::{Path, PathBuf};
+
 use anyhow::Result;
 use clap::Parser;
 use indicatif::{ProgressBar, ProgressStyle};
 
 use rust_zip_archive::archive::{self, Progress};
 use rust_zip_archive::cli::{Cli, Command};
+
+/// Destination for "Extract Here": the archive's own directory.
+fn extract_here_dir(archive: &Path) -> PathBuf {
+    archive
+        .parent()
+        .filter(|p| !p.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."))
+        .to_path_buf()
+}
+
+/// Destination for "Extract to name\": parent dir + the file name with a
+/// recognized archive/compressor suffix removed (fallback `<name>_extracted`).
+fn extract_to_dir(archive: &Path) -> PathBuf {
+    const SUFFIXES: &[&str] = &[
+        ".tar.gz", ".tar.bz2", ".tar.xz", ".tar.zst", ".tgz", ".tbz2", ".txz", ".tzst", ".tar",
+        ".zip", ".7z", ".rar", ".gz", ".bz2", ".xz", ".zst",
+    ];
+    let parent = archive
+        .parent()
+        .filter(|p| !p.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
+    let fname = archive
+        .file_name()
+        .map(|s| s.to_string_lossy().to_string())
+        .unwrap_or_default();
+    let lower = fname.to_lowercase();
+    let stem = SUFFIXES
+        .iter()
+        .find(|s| lower.ends_with(*s))
+        .map(|s| fname[..fname.len() - s.len()].to_string())
+        .unwrap_or_else(|| format!("{fname}_extracted"));
+    parent.join(stem)
+}
 
 fn make_bar(verb: &str) -> ProgressBar {
     let bar = ProgressBar::new(0);
@@ -51,6 +86,28 @@ fn main() -> Result<()> {
             bar.finish_with_message(format!("Extracted into {}", dest.display()));
         }
 
+        Command::ExtractHere { archive } => {
+            let dest = extract_here_dir(&archive);
+            let bar = make_bar("Extracting");
+            rust_zip_archive::archive::extract(&archive, &dest, false, |p: Progress| {
+                bar.set_length(p.total);
+                bar.set_position(p.current);
+                bar.set_message(p.message);
+            })?;
+            bar.finish_with_message(format!("Extracted into {}", dest.display()));
+        }
+
+        Command::ExtractTo { archive } => {
+            let dest = extract_to_dir(&archive);
+            let bar = make_bar("Extracting");
+            rust_zip_archive::archive::extract(&archive, &dest, false, |p: Progress| {
+                bar.set_length(p.total);
+                bar.set_position(p.current);
+                bar.set_message(p.message);
+            })?;
+            bar.finish_with_message(format!("Extracted into {}", dest.display()));
+        }
+
         Command::List { archive } => {
             let entries = rust_zip_archive::archive::list(&archive)?;
             println!("{:>12}  {:>12}  {:>6}  Name", "Size", "Compressed", "Ratio");
@@ -87,4 +144,42 @@ fn main() -> Result<()> {
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{extract_here_dir, extract_to_dir};
+    use std::path::{Path, PathBuf};
+
+    #[test]
+    fn here_dir_is_parent() {
+        assert_eq!(
+            extract_here_dir(Path::new("/tmp/a/b.zip")),
+            PathBuf::from("/tmp/a")
+        );
+    }
+
+    #[test]
+    fn to_dir_strips_known_suffixes() {
+        assert_eq!(
+            extract_to_dir(Path::new("/tmp/a/b.zip")),
+            PathBuf::from("/tmp/a/b")
+        );
+        assert_eq!(
+            extract_to_dir(Path::new("/tmp/a/b.tar.gz")),
+            PathBuf::from("/tmp/a/b")
+        );
+        assert_eq!(
+            extract_to_dir(Path::new("/tmp/a/b.tgz")),
+            PathBuf::from("/tmp/a/b")
+        );
+    }
+
+    #[test]
+    fn to_dir_fallback_when_no_known_suffix() {
+        assert_eq!(
+            extract_to_dir(Path::new("/tmp/a/weird.bin")),
+            PathBuf::from("/tmp/a/weird.bin_extracted")
+        );
+    }
 }
