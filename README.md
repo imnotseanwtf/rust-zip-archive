@@ -30,13 +30,15 @@ associates archive types (`.zip`, `.tar`, `.tar.gz`, `.tar.xz`, `.tar.zst`,
 
 After installing, archives get an **rza** menu in your file manager:
 
-- **Windows:** right-click an archive → (on Windows 11, **Show more options** →)
-  **rza ▸** → **Extract Here**, **Extract to folder**, or **Open with rza**.
-  Right-click any file/folder → **Add to archive (rza)…** opens the app ready to
-  create a new archive.
+- **Windows:** right-click an archive → (Windows 11: **Show more options** →)
+  **rza ▸** → **Extract Here**, **Extract to subfolder**, **Test archive**, or
+  **Open with rza**. Right-click any file or folder → **rza ▸** → **Add to
+  archive…**, **Compress to .zip**, or **Compress to .tar.gz**.
 - **Linux:** right-click an archive → **Open With → rza — Archive Utility**.
 
-These call the same engine as the CLI (`rza extract-here` / `rza extract-to`).
+These call the same engine as the CLI (`rza extract-here`, `rza test`,
+`rza compress-zip`, …). Menu labels are fixed text; the created/extracted files
+are still named after the item.
 
 > Note: on Windows, uninstalling does not currently remove the rza right-click entries automatically (a packaging-tool limitation); they can be removed manually from the registry if desired.
 
